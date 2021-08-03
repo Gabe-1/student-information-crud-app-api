@@ -5,6 +5,8 @@ const mysql = require('mysql2/promise');
 
 const app = express();
 
+const cors = require('cors');
+
 require('dotenv').config();
 
 // Establish the server connection
@@ -24,7 +26,10 @@ const pool = mysql.createPool({
 // app.use(bodyParser.json()); //Don't NEED to require('body-parser); for express 4.16+
 app.use(express.json()); //Used to parse JSON bodies
 
+app.use(cors());
+
 app.use(async function mysqlConnection(req, res, next) {
+  console.log(req.url)
   try {
     req.db = await pool.getConnection();
     req.db.connection.config.namedPlaceholders = true;
@@ -38,6 +43,7 @@ app.use(async function mysqlConnection(req, res, next) {
     if (req.db) req.db.release();
     throw err;
   }
+  console.log('Request Finished')
 });
 
 app.listen(port, () => console.log(`Listening on the port ${port}..`));
@@ -68,6 +74,23 @@ app.get('/learners/:id', async (req, res) => {
     console.log('learners/:id', data);
   } catch (err) {
     console.log('/learners/":id', err);
+  }
+});
+
+// GET specific learner list with search by name from the MySQL database
+app.get('/learners-search/:name', async (req, res) => {
+  console.log("Checking This" + req.params.name);
+  try {
+    const [data] = await req.db.query(
+      'SELECT learner_name, learner_Id  FROM learner_details WHERE learner_name = :name',
+      {
+        name: req.params.name
+      }
+    );
+    res.json(data);
+    console.log('/learners-search/:name', data);
+  } catch(err) {
+    console.log('/learners-search/:name', err);
   }
 });
 
@@ -136,14 +159,23 @@ app.post('/learners', async (req, res) => {
 
 
 // Router to UPDATE a learner's detail
-app.put('/:learner_id', async (req, res) => {
+app.put('/learners/:id', async (req, res) => {
   console.log(req.params)
+  console.log("I'm in learners request Id")
   try {
     const [data] = await req.db.query(`
-      UPDATE learner_details SET learner_email = :learner_email WHERE learner_id = :learner_id
+      UPDATE learner_details SET 
+        learner_name = :learner_name, 
+        learner_email = :learner_email,
+        course_Id = :course_Id,
+        available = :available
+      WHERE learner_id = :learner_id
     `, {
+      learner_name: req.body.learner_name,
       learner_email: req.body.learner_email,
-      learner_id: req.params.learner_id
+      course_Id: req.body.course_Id,
+      available: req.body.available,
+      learner_id: req.params.id ? parseInt(req.params.id) : 0
     });
     res.json('Learner Details Updated Successfully');
   } catch(err) {
@@ -156,6 +188,18 @@ app.delete('/learners/:id', async (req, res) => {
   try {
     const [data] = await req.db.query(`DELETE FROM learner_details WHERE learner_id = ?`, [req.params.id]);
     res.json(['Learner Details Deleted Successfully', data])
+    console.log(data  + "was deleted");
+    // res.send(202); // Can only use 1 res.json() or res.send()
+  } catch(err) {
+    console.log('/learners/:id', err);
+  }
+});
+
+app.delete('/learners', async (req, res) => {
+  try {
+    const [data] = await req.db.query(`DELETE FROM learner_details WHERE 1`, [req.params.id]);
+    res.json(['Learner Details Deleted Successfully', data])
+    console.log(data  + "was deleted");
     // res.send(202); // Can only use 1 res.json() or res.send()
   } catch(err) {
     console.log('/learners/:id', err);
